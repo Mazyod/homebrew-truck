@@ -52,7 +52,7 @@ class S3Util:
     def spec_path(self, target):
         return os.path.join(
             self.s3_base_path,
-            "{target}.json".format(target)
+            "{target}.json".format(target=target)
         )
 
     def binary_path(self, target, version):
