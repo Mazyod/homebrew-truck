@@ -1,6 +1,6 @@
-class Test < Formula
-  desc "Test."
-  url "https://github.com/..."
+class Truck < Formula
+  desc "Truck."
+  url "https://github.com/mazyod/homebrew-truck"
   version "0.0.1"
 
   def install
