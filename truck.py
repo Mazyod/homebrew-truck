@@ -312,7 +312,7 @@ class TruckAuthor:
 
         return content
 
-    def prepare_staging_area(files):
+    def prepare_staging_area(self, files):
 
         try:
             shutil.rmtree("Tmp")
