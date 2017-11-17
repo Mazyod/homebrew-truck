@@ -65,7 +65,7 @@ class S3Util:
 
     def binary_http_uri(self, target, version):
         return os.path.join(
-            "https://s3-{region}.amazonaws.com/".format(self.region),
+            "https://s3-{}.amazonaws.com/".format(self.region),
             self.binary_path(target, version)
         )
 
