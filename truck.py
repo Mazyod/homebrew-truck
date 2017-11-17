@@ -321,7 +321,10 @@ class TruckAuthor:
 
         os.makedirs("Tmp")
         for f in files:
-            shutil.copytree(f, "Tmp/" + os.path.basename(f))
+            if os.path.isdir(f):
+                shutil.copytree(f, "Tmp/" + os.path.basename(f))
+            else:
+                shutil.copyfile(f, "Tmp/" + os.path.basename(f))
 
         return "Tmp"
 
