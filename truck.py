@@ -49,28 +49,36 @@ class S3Util:
         start = 1 if base_path.startswith("/") else 0
         self.s3_base_path = base_path[start:]
 
-    def spec_path(self, target):
-        return os.path.join(
-            self.s3_base_path,
-            "{target}.json".format(target=target)
-        )
+    ## uri builders
+    def build_path(self, subpath):
+        return os.path.join(self.s3_base_path, subpath)
 
+    def build_http_uri(self, path):
+        host = "https://s3-{}.amazonaws.com/".format(self.region)
+        return os.path.join(host, path)
+
+    def build_s3_uri(self, path):
+        return os.path.join("s3://", path)
+
+    ## spec uris
+    def spec_path(self, target):
+        return self.build_path("{t}.json".format(t=target))
+
+    def spec_http_uri(self, target):
+        return self.build_http_uri(self.spec_path(target))
+
+    def spec_s3_uri(self, target):
+        return self.build_s3_uri(self.spec_path(target))
+
+    ## binary uris
     def binary_path(self, target, version):
-        return os.path.join(
-            self.s3_base_path,
-            "{target}/{version}/{target}.zip".format(
-                target=target, version=version
-            )
-        )
+        return self.build_path("{t}/{v}/{t}.zip".format(t=target, v=version))
 
     def binary_http_uri(self, target, version):
-        return os.path.join(
-            "https://s3-{}.amazonaws.com/".format(self.region),
-            self.binary_path(target, version)
-        )
+        return self.build_http_uri(self.binary_path(target, version))
 
     def binary_s3_uri(self, target, version):
-        return os.path.join("s3://", self.binary_path(target, version))
+        return self.build_s3_uri(self.binary_path(target, version))
 
 
 
@@ -124,7 +132,7 @@ class TruckDep:
 
     @property
     def version_filepath(self):
-        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name + ".version")
+        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name, self.name + ".version")
 
     @property
     def spec_path(self):
@@ -133,6 +141,10 @@ class TruckDep:
     @property
     def binary_path(self):
         return os.path.join(TRUCK_TMP_DIRECTORY, self.binary_filename)
+
+    @property
+    def extraction_path(self):
+        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name)
 
     @property
     def is_outdated(self):
@@ -217,7 +229,7 @@ class TruckClient:
     def extract_archives(self, deps):
         for dep in deps:
             zref = zipfile.ZipFile(dep.binary_path, 'r')
-            zref.extractall(TRUCK_ROOT_DIRECTORY)
+            zref.extractall(dep.extraction_path)
             zref.close()
 
     def pin_versions(self, deps):
@@ -384,13 +396,14 @@ class TruckAuthor:
         spec_json = self.open_or_create_json_file(spec_filepath, {})
 
         version = version or self.infer_target_version(spec_json)
-        s3_binary_path = s3util.binary_path(target, version)
-        s3_binary_url = s3util.binary_http_uri(target, version)
-        spec_json[version] = s3_binary_url
+        binary_path = s3util.binary_path(target, version)
+        binary_http_uri = s3util.binary_http_uri(target, version)
+        binary_s3_uri = s3util.binary_s3_uri(target, version)
+        spec_json[version] = binary_http_uri
 
         self.write_json_file(spec_filepath, spec_json)
         print("Updated {} spec:".format(target))
-        print("{} -> {}".format(version, s3_binary_path))
+        print("{} -> {}".format(version, binary_path))
 
         with open(target_config_filepath) as f:
             config_json = json.loads(f.read())
@@ -403,17 +416,18 @@ class TruckAuthor:
         print("Created {}".format(archive_filepath))
         print("Uploading to S3 ...")
 
-        json_s3_path = s3util.spec_path(target)
+        json_s3_uri = s3util.spec_s3_uri(target)
+        json_http_uri = s3util.spec_http_uri(target)
 
         upload_command = " ".join(map(lambda i: "=".join(i), truck_secrets.items()))
-        upload_command += " aws s3 cp {} s3://{} --acl public-read"
+        upload_command += ' aws s3 cp "{}" "{}" --acl public-read'
 
-        os.system(upload_command.format(spec_filepath, json_s3_path))
-        os.system(upload_command.format(archive_filepath, s3_binary_path))
+        os.system(upload_command.format(spec_filepath, json_s3_uri))
+        os.system(upload_command.format(archive_filepath, binary_s3_uri))
 
         print("Done!")
-        print("Updated {}".format(json_s3_path))
-        print("Created {}".format(s3_binary_url))
+        print("Updated {}".format(json_http_uri))
+        print("Created {}".format(binary_http_uri))
 
 
 ####
