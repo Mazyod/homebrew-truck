@@ -91,7 +91,13 @@ class TruckAction:
         return self.name + " - " + self.description + " (e.g. " + self.eg + ")"
 
     def trigger(self, args):
-        if len(args) != self.arg_count:
+
+        if isinstance(self.arg_count, int):
+            range_ = [self.arg_count]
+        else:
+            range_ = self.arg_count
+
+        if len(args) in range_:
             print("{} expects {} arguments".format(self.name, self.arg_count))
             exit(1)
 
@@ -269,7 +275,7 @@ class TruckAuthor:
             ),
             TruckAction(
                 "release",
-                1,
+                range(1, 3),
                 "truck release zendesk-sdk [3.0.2]",
                 "packages then uploads a release for given target",
                 self.perform_release_action
