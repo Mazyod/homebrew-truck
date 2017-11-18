@@ -97,7 +97,7 @@ class TruckAction:
         else:
             range_ = self.arg_count
 
-        if len(args) in range_:
+        if len(args) not in range_:
             print("{} expects {} arguments".format(self.name, self.arg_count))
             exit(1)
 
