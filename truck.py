@@ -385,7 +385,8 @@ class TruckAuthor:
 
         version = version or self.infer_target_version(spec_json)
         s3_binary_path = s3util.binary_path(target, version)
-        spec_json[version] = s3util.binary_http_uri(target, version)
+        s3_binary_url = s3util.binary_http_uri(target, version)
+        spec_json[version] = s3_binary_url
 
         self.write_json_file(spec_filepath, spec_json)
         print("Updated {} spec:".format(target))
@@ -412,7 +413,7 @@ class TruckAuthor:
 
         print("Done!")
         print("Updated {}".format(json_s3_path))
-        print("Created {}".format(s3_binary_path))
+        print("Created {}".format(s3_binary_url))
 
 
 ####
