@@ -1,6 +1,15 @@
 # Truck :truck:
 _Binary dependency management that's easy to pick-up!_
 
+## Installation
+
+```sh
+brew tap mazyod/homebrew-truck
+brew install truck
+# or ...
+brew install mazyod/homebrew-truck/truck
+```
+
 ## Problem
 
 As iOS developers using Carthage for dependcy management, we quickly hit a roadblock trying to distribute pre-built binaries with our repo. Even when trying to use Carthage binary specification, Carthage complained when the pre-built binary was a static framework.
