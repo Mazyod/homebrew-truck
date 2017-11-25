@@ -11,17 +11,29 @@ Regardless, we wanted something simple, straight-forward, and mostly automated f
 
 The way Truck aims to solve this problem is by having a versions specification file somewhere in the cloud, pointing to different compressed archives, which clients can download based on their version requirements. Done.
 
+### Configure Truck for Publishing
+
+Currently, Truck only supports AWS S3 as a hosting service, but you can use anything really. To configure truck for publishing, two things are required:
+
+1. `~/.truckrc` file that contains AWS keys in order to upload your files to S3.
+2. `truck-author.json` in a local directory where you want to manage your Truck "targets".
+
+You can simply do `truck add Blah whatever`, and truck should create a stub `.truckrc` configuration file for you to fill in. Then, you can use `truck init` to prepare the `truck-author.json` file:
+
+```sh
+$ truck init # creates truck-author.json
+# in truck-author.json, specify the basepath on S3 for truck to upload to (e.g. bucket-name/truck)
+```
+
 ### Publishing a Truck Dependency
 
-Currently, Truck only supports AWS S3 as a hosting service, but you can use anything really. So, to start with truck, you need to publish something. To publish a "Target", you'll need a Truck configuration file and a Target spec file..
+To publish a "Target", you'll need a Truck configuration file and a Target spec file..
 
-```zsh
-% truck init # creates truck-author.json
-# in truck-author.json, specify the basepath on S3 for truck to upload to (e.g. bucket-name/truck)
-% truck add MyTarget some/path/
-% truck add MyTarget some/file.ext
+```sh
+$ truck add MyTarget some/path/
+$ truck add MyTarget some/file.ext
 # we just authored MyTarget-spec.json with some/path/ folder and some/file.ext
-% truck release MyTarget "3.2.5"
+$ truck release MyTarget "3.2.5"
 # this pushes MyTarget.json to the basepath, and the specified files as a zip to some predefined path
 # MyTarget.json will contain an entry "3.2.5" pointing to the zip file location for clients to download
 ```
