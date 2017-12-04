@@ -157,7 +157,7 @@ class TruckDep:
         return version != self.version
 
     def download_spec(self):
-        url_session = urllib.URLopener()
+        url_session = urllib.FancyURLopener()
         url_session.retrieve(self.spec_url, self.spec_path)
 
         with open(self.spec_path) as f:
