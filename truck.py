@@ -359,7 +359,7 @@ class TruckAuthor:
         self.load_author_config()
 
         # workaround adding directories with trailing slash
-        path = path[:-1] if base_path.endswith("/") else path
+        path = path[:-1] if path.endswith("/") else path
 
         if not os.path.exists(path):
             print("{} doesn't exist!".format(path))
