@@ -113,10 +113,14 @@ class TruckAction:
 
 
 class TruckDep:
-    def __init__(self, json):
-        self.version = json["version"]
-        self.spec_url = json["url"]
-        self.binary_url = None
+    def __init__(self, version, url):
+        self.version = version
+        self.spec_url = url
+        self.spec_json = {}
+
+    @property
+    def binary_url(self):
+        return self.spec_json[self.version]
 
     @property
     def spec_filename(self):
@@ -161,18 +165,19 @@ class TruckDep:
         url_session.retrieve(self.spec_url, self.spec_path)
 
         with open(self.spec_path) as f:
-            spec_json = json.loads(f.read())
-
-        self.binary_url = spec_json[self.version]
+            try:
+                self.spec_json = json.loads(f.read())
+            except:
+                self.spec_json = {}
 
     def download_binary(self):
-        url_session = urllib.URLopener()
+        url_session = urllib.FancyURLopener()
         url_session.retrieve(self.binary_url, self.binary_path)
 
 
 class ClientConfig:
     def __init__(self, json):
-        self.deps = map(lambda dep: TruckDep(dep), json)
+        self.deps = map(lambda dep: TruckDep(**dep), json)
 
 
 ####
@@ -341,21 +346,23 @@ class TruckAuthor:
 
         return content
 
-    def prepare_staging_area(self, files):
+    def prepare_staging_area(self, root_dir, files):
 
         try:
-            shutil.rmtree("Tmp")
+            shutil.rmtree(root_dir)
         except Exception:
             pass
 
-        os.makedirs("Tmp")
+        files_dir = os.path.join(root_dir, "files")
+        os.makedirs(files_dir)
+
         for f in files:
             if os.path.isdir(f):
-                shutil.copytree(f, "Tmp/" + os.path.basename(f))
+                shutil.copytree(f, os.path.join(files_dir, os.path.basename(f)))
             else:
-                shutil.copyfile(f, "Tmp/" + os.path.basename(f))
+                shutil.copyfile(f, os.path.join(files_dir, os.path.basename(f)))
 
-        return "Tmp"
+        return files_dir
 
 
     def write_json_file(self, filepath, config):
@@ -391,11 +398,14 @@ class TruckAuthor:
         config = self.load_author_config()
         s3util = S3Util(config)
 
+        json_s3_uri = s3util.spec_s3_uri(target)
+        json_http_uri = s3util.spec_http_uri(target)
+
         truck_secrets_filepath = os.path.expanduser("~/.truckrc")
         truck_secrets = self.open_or_create_json_file(truck_secrets_filepath, TRUCK_SECRETS_TEMPLATE)
 
         # TODO - possibly fallback to env to find the keys
-        if not truck_secrets["AWS_ACCESS_KEY_ID"] or not truck_secrets["AWS_SECRET_ACCESS_KEY"]:
+        if "AWS_ACCESS_KEY_ID" not in truck_secrets or "AWS_SECRET_ACCESS_KEY" not in truck_secrets:
             print("Could not find AWS access keys in config nor env")
             print("Please fill them in ~/.truckrc")
             exit(1)
@@ -406,8 +416,15 @@ class TruckAuthor:
             print("Please run: truck add {} path/to/stuff".format(target))
             exit(1)
 
-        spec_filepath = TRUCK_SPEC_FILENAME.format(target=target)
-        spec_json = self.open_or_create_json_file(spec_filepath, {})
+        with open(target_config_filepath) as f:
+            config_json = json.loads(f.read())
+
+        staging_dir = TRUCK_TMP_DIRECTORY
+        files_dir = self.prepare_staging_area(staging_dir, config_json["files"])
+
+        truck_dep = TruckDep(version, json_http_uri)
+        truck_dep.download_spec()
+        spec_json = truck_dep.spec_json
 
         version = version or self.infer_target_version(spec_json)
         binary_path = s3util.binary_path(target, version)
@@ -415,23 +432,17 @@ class TruckAuthor:
         binary_s3_uri = s3util.binary_s3_uri(target, version)
         spec_json[version] = binary_http_uri
 
+        spec_filename = TRUCK_SPEC_FILENAME.format(target=target)
+        spec_filepath = os.path.join(TRUCK_TMP_DIRECTORY, spec_filename)
         self.write_json_file(spec_filepath, spec_json)
         print("Updated {} spec:".format(target))
         print("{} -> {}".format(version, binary_path))
 
-        with open(target_config_filepath) as f:
-            config_json = json.loads(f.read())
-
-        staging_dir = self.prepare_staging_area(config_json["files"])
-
-        shutil.make_archive(target, 'zip', staging_dir)
-        archive_filepath = target + ".zip"
+        shutil.make_archive(os.path.join(staging_dir, target), 'zip', files_dir)
+        archive_filepath = os.path.join(staging_dir, target + ".zip")
 
         print("Created {}".format(archive_filepath))
         print("Uploading to S3 ...")
-
-        json_s3_uri = s3util.spec_s3_uri(target)
-        json_http_uri = s3util.spec_http_uri(target)
 
         upload_command = " ".join(map(lambda i: "=".join(i), truck_secrets.items()))
         upload_command += ' aws s3 cp "{}" "{}" --acl public-read'
