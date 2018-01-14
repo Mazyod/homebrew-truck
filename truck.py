@@ -233,6 +233,13 @@ class TruckClient:
 
         os.makedirs(TRUCK_TMP_DIRECTORY)
 
+    def clean_extraction_paths(self, deps):
+        for dep in deps:
+            try:
+                shutil.rmtree(dep.extraction_path)
+            except:
+                pass
+
     def download_binaries_and_specs(self, deps):
         for dep in deps:
             dep.download_spec()
@@ -260,6 +267,7 @@ class TruckClient:
 
         self.clean_temp_folder()
         self.download_binaries_and_specs(deps)
+        self.clean_extraction_paths(deps)
         self.extract_archives(deps)
         self.pin_versions(deps)
 
