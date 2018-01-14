@@ -199,6 +199,13 @@ class TruckClient:
                 "truck pull",
                 "download all deps regardless of local cache",
                 self.perform_sync_action
+            ),
+            TruckAction(
+                "check",
+                0,
+                "truck check",
+                "ckeck if sync is required printing either ok or error",
+                self.perform_check_action
             )
         ]
 
@@ -260,6 +267,10 @@ class TruckClient:
         truck_config = self.load_client_config()
         self.fetch_deps(truck_config.deps)
 
+    def perform_check_action(self):
+        truck_config = self.load_client_config()
+        deps = [dep for dep in truck_config.deps if dep.is_outdated]
+        print("error" if deps else "ok")
 
 ####
 # TruckAuthor
