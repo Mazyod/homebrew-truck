@@ -6,6 +6,7 @@ this file contains both the client and authoring tools.
 import sys
 import os
 import json
+import time
 import urllib
 import zipfile
 import shutil
@@ -38,6 +39,27 @@ TARGET_CONFIG_FILEPATH = "{target}-config.json"
 ####
 # Basic Entities
 #
+
+def reporthook(count, block_size, total_size):
+    global start_time
+
+    if count == 0:
+        start_time = time.time()
+        return
+
+    duration = time.time() - start_time
+    progress_size = int(count * block_size)
+    speed = int(progress_size / (1024 * duration))
+    percent = int(count * block_size * 100 / total_size)
+
+    sys.stdout.write("\r...%d%%, %d MB, %d KB/s, %d seconds passed" %
+                    (percent, progress_size / (1024 * 1024), speed, duration))
+    sys.stdout.flush()
+
+def download(url, filename):
+    url_session = urllib.FancyURLopener()
+    url_session.retrieve(url, filename, reporthook=reporthook)
+
 
 class S3Util:
 
@@ -161,8 +183,7 @@ class TruckDep:
         return version != self.version
 
     def download_spec(self):
-        url_session = urllib.FancyURLopener()
-        url_session.retrieve(self.spec_url, self.spec_path)
+        download(self.spec_url, self.spec_path)
 
         with open(self.spec_path) as f:
             try:
@@ -171,8 +192,7 @@ class TruckDep:
                 self.spec_json = {}
 
     def download_binary(self):
-        url_session = urllib.FancyURLopener()
-        url_session.retrieve(self.binary_url, self.binary_path)
+        download(self.binary_url, self.binary_path)
 
 
 class ClientConfig:
