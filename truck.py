@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 Truck - a straight-forward dependency/binary manager
 this file contains both the client and authoring tools.
@@ -7,15 +7,18 @@ import sys
 import os
 import json
 import time
-import urllib
 import zipfile
 import shutil
+import urllib
+from urllib.request import FancyURLopener, urlopen
 from distutils.version import LooseVersion
 
 
 ####
 # Global configuration / constants
 #
+
+TRUCK_VERSION = "0.4.0"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -52,13 +55,27 @@ def reporthook(count, block_size, total_size):
     speed = int(progress_size / (1024 * duration))
     percent = int(count * block_size * 100 / total_size)
 
-    sys.stdout.write("\r...%d%%, %d MB, %d KB/s, %d seconds passed" %
+    sys.stdout.write('\x1b[2K\r')
+    sys.stdout.write("... %d%%, %d MB, %d KB/s, %d seconds passed" %
                     (percent, progress_size / (1024 * 1024), speed, duration))
     sys.stdout.flush()
 
 def download(url, filename):
-    url_session = urllib.FancyURLopener()
-    url_session.retrieve(url, filename, reporthook=reporthook)
+    url_session = FancyURLopener()
+
+    try:
+        url_session.retrieve(url, filename, reporthook=reporthook)
+    except:
+        print("warning: {} failed to download".format(url))
+        return
+
+    sys.stdout.write('\x1b[2K\r')
+    sys.stdout.write("... Downloaded " + filename + "\n")
+    sys.stdout.flush()
+
+def simple_download(url):
+    req = urlopen(url)
+    return req.read()
 
 
 class S3Util:
@@ -103,6 +120,84 @@ class S3Util:
         return self.build_s3_uri(self.binary_path(target, version))
 
 
+class OldStructure:
+
+    @classmethod
+    def create_if_present(cls, name):
+        struct = OldStructure(name)
+        if not os.path.isfile(struct.version_filepath):
+            return None
+
+        struct.build_object()
+        return struct
+
+    def __init__(self, name):
+        self.name = name
+        self.base_dir = TRUCK_ROOT_DIRECTORY
+        self.version = "0.0.0"
+        self.filelist = []
+
+    @property
+    def root_dir(self):
+        return os.path.join(self.base_dir, self.name)
+
+    @property
+    def version_filepath(self):
+        return os.path.join(self.root_dir, self.name + ".version")
+
+    def build_object(self):
+        all_files = os.listdir(self.root_dir)
+        ignored = [".DS_Store"]
+        self.filelist = [f for f in all_files if f not in ignored]
+
+        with open(self.version_filepath) as f:
+            self.version = f.read()
+
+    def rewrite_version_file(self):
+        with open(self.version_filepath, "w+") as f:
+            f.write(json.dumps({
+                "version": self.version,
+                "files": self.filelist
+            }))
+
+
+class Migrator:
+    @classmethod
+    def perform_migration(cls, truck_config):
+
+        if not os.path.isdir(TRUCK_ROOT_DIRECTORY):
+            return
+
+        # 1. create OldStructure objects
+        folders = os.listdir(TRUCK_ROOT_DIRECTORY)
+        possible_items = map(OldStructure.create_if_present, folders)
+        items = [i for i in possible_items if i is not None]
+
+        # 2. move them to staging area
+        staging_dir = os.path.join(TRUCK_ROOT_DIRECTORY, "migration-staging")
+
+        try:
+            shutil.rmtree(staging_dir)
+        except:
+            pass
+
+        os.makedirs(staging_dir)
+
+        for struct in items:
+            struct.rewrite_version_file()
+            shutil.move(struct.root_dir, staging_dir)
+            struct.base_dir = staging_dir
+
+            files = os.listdir(struct.root_dir)
+            for f in files:
+                filepath = os.path.join(struct.root_dir, f)
+                try:
+                    shutil.move(filepath, TRUCK_ROOT_DIRECTORY)
+                except:
+                    print("warning: failed to move " + filepath)
+
+        shutil.rmtree(staging_dir)
+
 
 class TruckAction:
 
@@ -139,6 +234,8 @@ class TruckDep:
         self.version = version
         self.spec_url = url
         self.spec_json = {}
+        self.binary_filelist = []
+        self.old_spec = self.load_old_spec()
 
     @property
     def binary_url(self):
@@ -158,7 +255,7 @@ class TruckDep:
 
     @property
     def version_filepath(self):
-        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name, self.name + ".version")
+        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name + ".version")
 
     @property
     def spec_path(self):
@@ -169,8 +266,12 @@ class TruckDep:
         return os.path.join(TRUCK_TMP_DIRECTORY, self.binary_filename)
 
     @property
+    def binary_zipfile(self):
+        return zipfile.ZipFile(self.binary_path, 'r')
+
+    @property
     def extraction_path(self):
-        return os.path.join(TRUCK_ROOT_DIRECTORY, self.name)
+        return TRUCK_ROOT_DIRECTORY
 
     @property
     def is_outdated(self):
@@ -178,9 +279,16 @@ class TruckDep:
             return True
 
         with open(self.version_filepath) as f:
-            version = f.read()
+            meta = json.loads(f.read())
 
-        return version != self.version
+        return meta["version"] != self.version
+
+    def load_old_spec(self):
+        if not os.path.isfile(self.version_filepath):
+            return None
+
+        with open(self.version_filepath) as f:
+            return json.loads(f.read())
 
     def download_spec(self):
         download(self.spec_url, self.spec_path)
@@ -193,6 +301,9 @@ class TruckDep:
 
     def download_binary(self):
         download(self.binary_url, self.binary_path)
+        all_files = self.binary_zipfile.namelist()
+        top_level = set([f.split("/")[0] for f in all_files])
+        self.binary_filelist = list(top_level)
 
 
 class ClientConfig:
@@ -210,6 +321,8 @@ class ClientConfig:
 class TruckClient:
 
     def __init__(self):
+        self.truck_config = self.load_client_config()
+        self.perform_migration_if_needed()
         self.actions = [
             TruckAction(
                 "sync",
@@ -231,14 +344,31 @@ class TruckClient:
                 "truck check",
                 "ckeck if sync is required printing either ok or error",
                 self.perform_check_action
+            ),
+            TruckAction(
+                "version",
+                0,
+                "truck version",
+                "print version and exit",
+                self.perform_version_action
             )
         ]
+
+    def perform_migration_if_needed(self):
+        if not self.truck_config:
+            return
+
+        Migrator.perform_migration(self.truck_config)
+
+    def assert_truck_config_available(self):
+        if not self.truck_config:
+            print("Cannot find {} in local directory!".format(config_filename))
+            exit(1)
 
     def load_client_config(self):
         config_filename = "truck.json"
         if not os.path.isfile(config_filename):
-            print("Cannot find {} in local directory!".format(config_filename))
-            exit(1)
+            return None
 
         with open(config_filename) as f:
             client_json = json.loads(f.read())
@@ -253,28 +383,35 @@ class TruckClient:
 
         os.makedirs(TRUCK_TMP_DIRECTORY)
 
-    def clean_extraction_paths(self, deps):
-        for dep in deps:
+    def clean_extraction_path(self, dep):
+        if not dep.old_spec:
+            return
+
+        for f in dep.old_spec["files"]:
+            filepath = os.path.join(TRUCK_ROOT_DIRECTORY, f)
             try:
-                shutil.rmtree(dep.extraction_path)
+                if os.path.isfile(filepath):
+                    os.remove(filepath)
+                else:
+                    shutil.rmtree(filepath)
             except:
-                pass
+                print("warning: failed to remove " + filepath)
 
-    def download_binaries_and_specs(self, deps):
-        for dep in deps:
-            dep.download_spec()
-            dep.download_binary()
+    def download_binary_and_spec(self, dep):
+        dep.download_spec()
+        dep.download_binary()
 
-    def extract_archives(self, deps):
-        for dep in deps:
-            zref = zipfile.ZipFile(dep.binary_path, 'r')
-            zref.extractall(dep.extraction_path)
-            zref.close()
+    def extract_archive(self, dep):
+        zref = dep.binary_zipfile
+        zref.extractall(dep.extraction_path)
+        zref.close()
 
-    def pin_versions(self, deps):
-        for dep in deps:
-            with open(dep.version_filepath, "w+") as f:
-                f.write(dep.version)
+    def pin_version(self, dep):
+        with open(dep.version_filepath, "w+") as f:
+            f.write(json.dumps({
+                "version": dep.version,
+                "files": dep.binary_filelist
+            }))
 
     def fetch_deps(self, deps):
 
@@ -286,24 +423,32 @@ class TruckClient:
         print("\n".join([dep.name for dep in deps]))
 
         self.clean_temp_folder()
-        self.download_binaries_and_specs(deps)
-        self.clean_extraction_paths(deps)
-        self.extract_archives(deps)
-        self.pin_versions(deps)
+
+        for dep in deps:
+            self.download_binary_and_spec(dep)
+            self.clean_extraction_path(dep)
+            self.extract_archive(dep)
+            self.pin_version(dep)
+            print(dep.name + " synced!")
+
+        self.clean_temp_folder()
 
     def perform_sync_action(self):
-        truck_config = self.load_client_config()
-        deps = [dep for dep in truck_config.deps if dep.is_outdated]
+        self.assert_truck_config_available()
+        deps = [dep for dep in self.truck_config.deps if dep.is_outdated]
         self.fetch_deps(deps)
 
     def perform_pull_action(self):
-        truck_config = self.load_client_config()
-        self.fetch_deps(truck_config.deps)
+        self.assert_truck_config_available()
+        self.fetch_deps(self.truck_config.deps)
 
     def perform_check_action(self):
-        truck_config = self.load_client_config()
-        deps = [dep for dep in truck_config.deps if dep.is_outdated]
+        self.assert_truck_config_available()
+        deps = [dep for dep in self.truck_config.deps if dep.is_outdated]
         print("error" if deps else "ok")
+
+    def perform_version_action(self):
+        print(TRUCK_VERSION)
 
 ####
 # TruckAuthor
@@ -335,6 +480,20 @@ class TruckAuthor:
                 "truck release zendesk-sdk [3.0.2]",
                 "packages then uploads a release for given target",
                 self.perform_release_action
+            ),
+            TruckAction(
+                "versions",
+                1,
+                "truck versions zendesk-sdk",
+                "prints comma separated list of versions for target",
+                self.perform_versions_action
+            ),
+            TruckAction(
+                "reset",
+                1,
+                "truck reset zendesk-sdk",
+                "deletes the spec json config",
+                self.perform_reset_action
             )
         ]
 
@@ -354,7 +513,7 @@ class TruckAuthor:
     def infer_target_version(self, spec_json):
 
         versions = spec_json.keys()
-        versions.sort(key=lambda x: LooseVersion(x))
+        versions = sorted(versions, key=lambda x: LooseVersion(x))
 
         if not versions:
             return "1.0.0"
@@ -396,6 +555,33 @@ class TruckAuthor:
     def write_json_file(self, filepath, config):
         with open(filepath, "w+") as f:
             f.write(json.dumps(config, indent=2) + "\n")
+
+    def perform_reset_action(self, target):
+        # load it just to make sure user is in the correct dir
+        self.load_author_config()
+
+        filepath = target + "-config.json"
+        try:
+            os.remove(filepath)
+            print(filepath + " removed")
+
+        except:
+            print("warning: {} not found".format(filepath))
+
+    def perform_versions_action(self, target):
+        config = self.load_author_config()
+        s3util = S3Util(config)
+
+        try:
+            json_http_uri = s3util.spec_http_uri(target)
+            spec_data = simple_download(json_http_uri)
+            spec_json = json.loads(spec_data)
+            versions = ", ".join(spec_json.keys())
+
+            print(versions)
+
+        except:
+            print("None")
 
     def perform_init_action(self):
         self.open_or_create_json_file("truck-author.json", TRUCK_AUTHOR_TEMPLATE)
