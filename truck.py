@@ -18,7 +18,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.4.0"
+TRUCK_VERSION = "0.4.1"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -65,8 +65,9 @@ def download(url, filename):
 
     try:
         url_session.retrieve(url, filename, reporthook=reporthook)
-    except:
+    except Exception as e:
         print("warning: {} failed to download".format(url))
+        print(e)
         return
 
     sys.stdout.write('\x1b[2K\r')
@@ -193,8 +194,9 @@ class Migrator:
                 filepath = os.path.join(struct.root_dir, f)
                 try:
                     shutil.move(filepath, TRUCK_ROOT_DIRECTORY)
-                except:
+                except Exception as e:
                     print("warning: failed to move " + filepath)
+                    print(e)
 
         shutil.rmtree(staging_dir)
 
@@ -537,7 +539,7 @@ class TruckAuthor:
 
         try:
             shutil.rmtree(root_dir)
-        except Exception:
+        except:
             pass
 
         files_dir = os.path.join(root_dir, "files")
