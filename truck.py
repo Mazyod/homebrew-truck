@@ -18,21 +18,27 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.4.1"
+TRUCK_VERSION = "0.5.0"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
 
 TRUCK_SECRETS_TEMPLATE = {
+    "GITHUB_TOKEN": "",
     "AWS_ACCESS_KEY_ID": "",
     "AWS_SECRET_ACCESS_KEY": ""
 }
 
 TRUCK_AUTHOR_TEMPLATE = {
-    "aws": {
-        "s3_base_path": "",
-        "default_region": "eu-west-1"
+    "github": {
+        "user": "",
+        "repo": ""
     }
+    # aws config structure:
+    # "aws": {
+    #     "s3_base_path": "",
+    #     "default_region": "eu-west-1"
+    # }
 }
 
 TRUCK_SPEC_FILENAME = "{target}-spec.json"
@@ -79,126 +85,24 @@ def simple_download(url):
     return req.read()
 
 
-class S3Util:
+class PathUtils:
 
-    def __init__(self, author_config):
-        config = author_config["aws"]
-        self.region = config["default_region"]
+    # file operations
+    @classmethod
+    def open_or_create_json_file(cls, filepath, template):
 
-        base_path = config["s3_base_path"]
-        start = 1 if base_path.startswith("/") else 0
-        self.s3_base_path = base_path[start:]
+        if not os.path.exists(filepath):
+            cls.write_json_file(filepath, template)
 
-    ## uri builders
-    def build_path(self, subpath):
-        return os.path.join(self.s3_base_path, subpath)
+        with open(filepath) as f:
+            content = json.loads(f.read())
 
-    def build_http_uri(self, path):
-        host = "https://s3-{}.amazonaws.com/".format(self.region)
-        return os.path.join(host, path)
-
-    def build_s3_uri(self, path):
-        return os.path.join("s3://", path)
-
-    ## spec uris
-    def spec_path(self, target):
-        return self.build_path("{t}.json".format(t=target))
-
-    def spec_http_uri(self, target):
-        return self.build_http_uri(self.spec_path(target))
-
-    def spec_s3_uri(self, target):
-        return self.build_s3_uri(self.spec_path(target))
-
-    ## binary uris
-    def binary_path(self, target, version):
-        return self.build_path("{t}/{v}/{t}.zip".format(t=target, v=version))
-
-    def binary_http_uri(self, target, version):
-        return self.build_http_uri(self.binary_path(target, version))
-
-    def binary_s3_uri(self, target, version):
-        return self.build_s3_uri(self.binary_path(target, version))
-
-
-class OldStructure:
+        return content
 
     @classmethod
-    def create_if_present(cls, name):
-        struct = OldStructure(name)
-        if not os.path.isfile(struct.version_filepath):
-            return None
-
-        struct.build_object()
-        return struct
-
-    def __init__(self, name):
-        self.name = name
-        self.base_dir = TRUCK_ROOT_DIRECTORY
-        self.version = "0.0.0"
-        self.filelist = []
-
-    @property
-    def root_dir(self):
-        return os.path.join(self.base_dir, self.name)
-
-    @property
-    def version_filepath(self):
-        return os.path.join(self.root_dir, self.name + ".version")
-
-    def build_object(self):
-        all_files = os.listdir(self.root_dir)
-        ignored = [".DS_Store"]
-        self.filelist = [f for f in all_files if f not in ignored]
-
-        with open(self.version_filepath) as f:
-            self.version = f.read()
-
-    def rewrite_version_file(self):
-        with open(self.version_filepath, "w+") as f:
-            f.write(json.dumps({
-                "version": self.version,
-                "files": self.filelist
-            }))
-
-
-class Migrator:
-    @classmethod
-    def perform_migration(cls, truck_config):
-
-        if not os.path.isdir(TRUCK_ROOT_DIRECTORY):
-            return
-
-        # 1. create OldStructure objects
-        folders = os.listdir(TRUCK_ROOT_DIRECTORY)
-        possible_items = map(OldStructure.create_if_present, folders)
-        items = [i for i in possible_items if i is not None]
-
-        # 2. move them to staging area
-        staging_dir = os.path.join(TRUCK_ROOT_DIRECTORY, "migration-staging")
-
-        try:
-            shutil.rmtree(staging_dir)
-        except:
-            pass
-
-        os.makedirs(staging_dir)
-
-        for struct in items:
-            struct.rewrite_version_file()
-            shutil.move(struct.root_dir, staging_dir)
-            struct.base_dir = staging_dir
-
-            files = os.listdir(struct.root_dir)
-            for f in files:
-                filepath = os.path.join(struct.root_dir, f)
-                try:
-                    shutil.move(filepath, TRUCK_ROOT_DIRECTORY)
-                except Exception as e:
-                    print("warning: failed to move " + filepath)
-                    print(e)
-
-        shutil.rmtree(staging_dir)
+    def write_json_file(cls, filepath, config):
+        with open(filepath, "w+") as f:
+            f.write(json.dumps(config, indent=2) + "\n")
 
 
 class TruckAction:
@@ -313,6 +217,21 @@ class ClientConfig:
         self.deps = map(lambda dep: TruckDep(**dep), json)
 
 
+class Truck:
+    SECRETS = None
+
+    @classmethod
+    def secrets(cls):
+        if cls.SECRETS:
+            return cls.SECRETS
+
+        truck_secrets_filepath = os.path.expanduser("~/.truckrc")
+        cls.SECRETS = PathUtils.open_or_create_json_file(
+            truck_secrets_filepath, TRUCK_SECRETS_TEMPLATE
+        )
+
+        return cls.SECRETS
+
 ####
 # Truck client implementation
 #
@@ -324,7 +243,6 @@ class TruckClient:
 
     def __init__(self):
         self.truck_config = self.load_client_config()
-        self.perform_migration_if_needed()
         self.actions = [
             TruckAction(
                 "sync",
@@ -355,12 +273,6 @@ class TruckClient:
                 self.perform_version_action
             )
         ]
-
-    def perform_migration_if_needed(self):
-        if not self.truck_config:
-            return
-
-        Migrator.perform_migration(self.truck_config)
 
     def assert_truck_config_available(self):
         if not self.truck_config:
@@ -459,8 +371,165 @@ class TruckClient:
 # specifications.
 #
 
+class Hosting:
+
+    def __init__(self, config):
+        self.config = config
+        self.hosts = []
+
+        # prefer github config over s3 ;)
+        if "github" in self.config:
+            self.hosts.append(GithubHost(config))
+        if "aws" in self.config:
+            self.hosts.append(S3Host(config))
+
+    @property
+    def active_hosting(self):
+        hosts = self.all()
+        if not hosts:
+            print("Please populate truck-author.json with a supported host")
+            exit(1)
+        return hosts[0]
+
+    def all(self):
+        return self.hosts
+
+    def find_spec(self, target):
+        spec = {}
+        for host in self.all():
+            try:
+                json_http_uri = host.spec_http_uri(target)
+                spec_data = simple_download(json_http_uri)
+                spec.update(json.loads(spec_data))
+            except:
+                pass
+
+        return spec
+
+class GithubHost:
+    def __init__(self, config):
+        self.user = config["github"]["user"]
+        self.repo = config["github"]["repo"]
+        self.base_path = "https://github.com/{user}/{repo}/releases/download/truck".format(
+            user=self.user,
+            repo=self.repo
+        )
+
+    # path definitions
+
+    ## uri builders
+    def build_http_uri(self, path):
+        return os.path.join(self.base_path, path)
+
+    ## spec uris
+    def spec_http_uri(self, target):
+        spec_path = "{t}.json".format(t=target)
+        return self.build_http_uri(spec_path)
+
+    ## binary uris
+    def binary_http_uri(self, target, version):
+        binary_path = "{t}-{v}.zip".format(t=target, v=version)
+        return self.build_http_uri(binary_path)
+
+    # actions
+
+    def upload_file(self, name, local_path):
+
+        upload_command = " ".join(map(lambda i: "=".join(i), Truck.secrets().items()))
+        upload_command += (
+            ' github-release upload'
+            ' -u {user}'
+            ' -r {repo}'
+            ' -t truck'
+            ' -n {name}'
+            ' -f {file}'
+        ).format(user=self.user, repo=self.repo, name=name, file=local_path)
+
+        os.system(upload_command)
+
+    def publish(self, target, version, spec_filepath, archive_filepath):
+        # TODO - possibly fallback to env to find the keys
+        if "GITHUB_TOKEN" not in Truck.secrets():
+            print("Could not find Github token in config nor env")
+            print("Please fill them in ~/.truckrc")
+            exit(1)
+
+        spec_name = '{t}.json'.format(t=target)
+        binary_name = '{t}-{v}.zip'.format(t=target, v=version)
+
+        print("Uploading to Github ...")
+        self.upload_file(spec_name, spec_filepath)
+        self.upload_file(binary_name, archive_filepath)
+
+class S3Host:
+    def __init__(self, author_config):
+
+        config = author_config["aws"]
+        self.region = config["default_region"]
+
+        base_path = config["s3_base_path"]
+        start = 1 if base_path.startswith("/") else 0
+        self.base_path = base_path[start:]
+
+        self.host = "https://s3-{}.amazonaws.com/".format(self.region)
+
+    # path definitions
+
+    ## uri builders
+    def build_path(self, subpath):
+        return os.path.join(self.base_path, subpath)
+
+    def build_http_uri(self, path):
+        return os.path.join(self.host, path)
+
+    def build_s3_uri(self, path):
+        return os.path.join("s3://", path)
+
+    ## spec uris
+    def spec_path(self, target):
+        return self.build_path("{t}.json".format(t=target))
+
+    def spec_http_uri(self, target):
+        return self.build_http_uri(self.spec_path(target))
+
+    def spec_s3_uri(self, target):
+        return self.build_s3_uri(self.spec_path(target))
+
+    ## binary uris
+    def binary_path(self, target, version):
+        return self.build_path("{t}/{v}/{t}.zip".format(t=target, v=version))
+
+    def binary_http_uri(self, target, version):
+        return self.build_http_uri(self.binary_path(target, version))
+
+    def binary_s3_uri(self, target, version):
+        return self.build_s3_uri(self.binary_path(target, version))
+
+    # actions
+
+    def upload_file(self, local_path, remote_path):
+        upload_command = " ".join(map(lambda i: "=".join(i), Truck.secrets().items()))
+        upload_command += ' aws s3 cp "{}" "{}" --acl public-read'
+        os.system(upload_command.format(local_path, remote_path))
+
+    def publish(self, target, version, spec_filepath, archive_filepath):
+
+        # TODO - possibly fallback to env to find the keys
+        if "AWS_ACCESS_KEY_ID" not in Truck.secrets() \
+            or "AWS_SECRET_ACCESS_KEY" not in Truck.secrets():
+            print("Could not find AWS access keys in config nor env")
+            print("Please fill them in ~/.truckrc")
+            exit(1)
+
+        print("Uploading to S3 ...")
+        self.upload_file(spec_filepath, self.spec_s3_uri(target))
+        self.upload_file(archive_filepath, self.binary_s3_uri(target, version))
+
+
 class TruckAuthor:
     def __init__(self):
+        self.config = self.load_author_config()
+        self.hosting = Hosting(self.config)
         self.actions = [
             TruckAction(
                 "init",
@@ -502,14 +571,18 @@ class TruckAuthor:
     def load_author_config(self):
         config_filename = "truck-author.json"
         if not os.path.isfile(config_filename):
-            print("Cannot find {} in local directory!".format(config_filename))
-            print("Try running from correct dir, or run truck init")
-            exit(1)
+            return None
 
         with open(config_filename) as f:
             author_json = json.loads(f.read())
 
         return author_json
+
+    def assert_truck_config_available(self):
+        if not self.config:
+            print("Cannot find {} in local directory!".format(config_filename))
+            print("Try running from correct dir, or run truck init")
+            exit(1)
 
 
     def infer_target_version(self, spec_json):
@@ -524,16 +597,6 @@ class TruckAuthor:
         split_version = max_version.split(".")
         split_version[-1] = str(int(split_version[-1]) + 1)
         return ".".join(split_version)
-
-    def open_or_create_json_file(self, filepath, template):
-
-        if not os.path.exists(filepath):
-            self.write_json_file(filepath, template)
-
-        with open(filepath) as f:
-            content = json.loads(f.read())
-
-        return content
 
     def prepare_staging_area(self, root_dir, files):
 
@@ -553,14 +616,8 @@ class TruckAuthor:
 
         return files_dir
 
-
-    def write_json_file(self, filepath, config):
-        with open(filepath, "w+") as f:
-            f.write(json.dumps(config, indent=2) + "\n")
-
     def perform_reset_action(self, target):
-        # load it just to make sure user is in the correct dir
-        self.load_author_config()
+        self.assert_truck_config_available()
 
         filepath = target + "-config.json"
         try:
@@ -571,26 +628,21 @@ class TruckAuthor:
             print("warning: {} not found".format(filepath))
 
     def perform_versions_action(self, target):
-        config = self.load_author_config()
-        s3util = S3Util(config)
+        self.assert_truck_config_available()
 
-        try:
-            json_http_uri = s3util.spec_http_uri(target)
-            spec_data = simple_download(json_http_uri)
-            spec_json = json.loads(spec_data)
+        spec_json = self.hosting.find_spec(target)
+        if spec_json:
             versions = ", ".join(spec_json.keys())
-
             print(versions)
-
-        except:
+        else:
             print("None")
 
     def perform_init_action(self):
-        self.open_or_create_json_file("truck-author.json", TRUCK_AUTHOR_TEMPLATE)
+        PathUtils.open_or_create_json_file("truck-author.json", TRUCK_AUTHOR_TEMPLATE)
 
     def perform_add_action(self, target, path):
         # load it just to make sure user is in the correct dir
-        self.load_author_config()
+        self.assert_truck_config_available()
 
         # workaround adding directories with trailing slash
         path = path[:-1] if path.endswith("/") else path
@@ -600,32 +652,21 @@ class TruckAuthor:
             exit(1)
 
         filepath = target + "-config.json"
-        config = self.open_or_create_json_file(filepath, {"files":[]})
+        config = PathUtils.open_or_create_json_file(filepath, {"files":[]})
 
         if path not in config["files"]:
             config["files"] += [path]
         else:
             print("warning: {} already exists in config".format(path))
 
-        self.write_json_file(filepath, config)
+        PathUtils.write_json_file(filepath, config)
 
     def perform_release_action(self, target, version=None):
+        self.assert_truck_config_available()
 
-        config = self.load_author_config()
-        s3util = S3Util(config)
+        version = version or self.infer_target_version(spec_json)
 
-        json_s3_uri = s3util.spec_s3_uri(target)
-        json_http_uri = s3util.spec_http_uri(target)
-
-        truck_secrets_filepath = os.path.expanduser("~/.truckrc")
-        truck_secrets = self.open_or_create_json_file(truck_secrets_filepath, TRUCK_SECRETS_TEMPLATE)
-
-        # TODO - possibly fallback to env to find the keys
-        if "AWS_ACCESS_KEY_ID" not in truck_secrets or "AWS_SECRET_ACCESS_KEY" not in truck_secrets:
-            print("Could not find AWS access keys in config nor env")
-            print("Please fill them in ~/.truckrc")
-            exit(1)
-
+        # load the target config file
         target_config_filepath = TARGET_CONFIG_FILEPATH.format(target=target)
         if not os.path.isfile(target_config_filepath):
             print("Can't find: {}".format(target_config_filepath))
@@ -635,38 +676,32 @@ class TruckAuthor:
         with open(target_config_filepath) as f:
             config_json = json.loads(f.read())
 
+        # prepare staging area
         staging_dir = TRUCK_TMP_DIRECTORY
         files_dir = self.prepare_staging_area(staging_dir, config_json["files"])
 
-        truck_dep = TruckDep(version, json_http_uri)
-        truck_dep.download_spec()
-        spec_json = truck_dep.spec_json
+        # add new version to spec json
+        host = self.hosting.active_hosting
 
-        version = version or self.infer_target_version(spec_json)
-        binary_path = s3util.binary_path(target, version)
-        binary_http_uri = s3util.binary_http_uri(target, version)
-        binary_s3_uri = s3util.binary_s3_uri(target, version)
-        spec_json[version] = binary_http_uri
+        spec_json = self.hosting.find_spec(target)
+        spec_json[version] = host.binary_http_uri(target, version)
 
+        # write spec to temp file so we can upload it
         spec_filename = TRUCK_SPEC_FILENAME.format(target=target)
         spec_filepath = os.path.join(TRUCK_TMP_DIRECTORY, spec_filename)
-        self.write_json_file(spec_filepath, spec_json)
-        print("Updated {} spec:".format(target))
-        print("{} -> {}".format(version, binary_path))
+        PathUtils.write_json_file(spec_filepath, spec_json)
 
         shutil.make_archive(os.path.join(staging_dir, target), 'zip', files_dir)
         archive_filepath = os.path.join(staging_dir, target + ".zip")
 
         print("Created {}".format(archive_filepath))
-        print("Uploading to S3 ...")
 
-        upload_command = " ".join(map(lambda i: "=".join(i), truck_secrets.items()))
-        upload_command += ' aws s3 cp "{}" "{}" --acl public-read'
+        host.publish(target, version, spec_filepath, archive_filepath)
 
-        os.system(upload_command.format(spec_filepath, json_s3_uri))
-        os.system(upload_command.format(archive_filepath, binary_s3_uri))
+        json_http_uri = host.spec_http_uri(target)
+        binary_http_uri = host.binary_http_uri(target, version)
 
-        print("Done!")
+        print("Done! {} -> {}".format(target, version))
         print("Updated {}".format(json_http_uri))
         print("Created {}".format(binary_http_uri))
 
