@@ -18,7 +18,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.5.0"
+TRUCK_VERSION = "0.5.1"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -374,7 +374,7 @@ class TruckClient:
 class Hosting:
 
     def __init__(self, config):
-        self.config = config
+        self.config = config or {}
         self.hosts = []
 
         # prefer github config over s3 ;)
