@@ -18,7 +18,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.5.2"
+TRUCK_VERSION = "0.5.3"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -437,7 +437,7 @@ class GithubHost:
 
         upload_command = " ".join(map(lambda i: "=".join(i), Truck.secrets().items()))
         upload_command += (
-            ' github-release upload'
+            ' github-release upload --replace'
             ' -u {user}'
             ' -r {repo}'
             ' -t truck'
