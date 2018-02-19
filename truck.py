@@ -18,7 +18,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.5.1"
+TRUCK_VERSION = "0.5.2"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -664,8 +664,6 @@ class TruckAuthor:
     def perform_release_action(self, target, version=None):
         self.assert_truck_config_available()
 
-        version = version or self.infer_target_version(spec_json)
-
         # load the target config file
         target_config_filepath = TARGET_CONFIG_FILEPATH.format(target=target)
         if not os.path.isfile(target_config_filepath):
@@ -684,6 +682,7 @@ class TruckAuthor:
         host = self.hosting.active_hosting
 
         spec_json = self.hosting.find_spec(target)
+        version = version or self.infer_target_version(spec_json)
         spec_json[version] = host.binary_http_uri(target, version)
 
         # write spec to temp file so we can upload it
