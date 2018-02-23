@@ -22,10 +22,20 @@ The way Truck aims to solve this problem is by having a versions specification f
 
 ### Configure Truck for Publishing
 
-Currently, Truck only supports AWS S3 as a hosting service, but you can use anything really. To configure truck for publishing, two things are required:
+Currently, Truck supports either Github releases or AWS S3 as a hosting service. To configure truck for publishing, two things are required:
 
-1. `~/.truckrc` file that contains AWS keys in order to upload your files to S3.
+1. `~/.truckrc` file that contains Github access token (with repo access) or AWS access key/secret pair.
 2. `truck-author.json` in a local directory where you want to manage your Truck "targets".
+
+```js
+// .truckrc blueprint
+{
+  "GITHUB_TOKEN": "(access token with repo access)",
+  "AWS_ACCESS_KEY_ID": "(aws access key)",
+  "AWS_SECRET_ACCESS_KEY": "(aws access secret)",
+  "AWS_DEFAULT_REGION": "eu-west-1"
+}
+```
 
 You can simply do `truck add Blah whatever`, and truck should create a stub `.truckrc` configuration file for you to fill in. Then, you can use `truck init` to prepare the `truck-author.json` file:
 
