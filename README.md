@@ -26,6 +26,7 @@ Currently, Truck supports either Github releases or AWS S3 as a hosting service.
 
 1. `~/.truckrc` file that contains Github access token (with repo access) or AWS access key/secret pair.
 2. `truck-author.json` in a local directory where you want to manage your Truck "targets".
+3. Only if using Github, create a `truck` tag on your hosting repo, which we will upload the files under.
 
 ```js
 // .truckrc blueprint
