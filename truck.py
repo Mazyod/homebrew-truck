@@ -10,6 +10,7 @@ import time
 import zipfile
 import shutil
 import urllib
+import hashlib
 from urllib.request import FancyURLopener, urlopen
 from distutils.version import LooseVersion
 
@@ -49,6 +50,50 @@ TARGET_CONFIG_FILEPATH = "{target}-config.json"
 # Basic Entities
 #
 
+class DownloadCache:
+    def __init__(self):
+        self.cache_dir = os.path.expanduser("~/Library/Caches/truck")
+
+    @property
+    def downloads_dir(self):
+        path = os.path.join(self.cache_dir, "downloads")
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def key_for_url(self, url):
+        hashfun = hashlib.md5()
+        hashfun.update(url.encode())
+        return hashfun.hexdigest()
+
+    def cache_path_for_url(self, url):
+        key = self.key_for_url(url)
+        return os.path.join(self.downloads_dir, key)
+
+    def nuke(self):
+        try:
+            shutil.rmtree(self.downloads_dir)
+        except:
+            pass
+
+    def store(self, url, payload_path):
+        cache_path = self.cache_path_for_url(url)
+        try:
+            shutil.copy2(payload_path, cache_path)
+            print(f"Cached {payload_path} -> {cache_path}")
+        except Exception as e:
+            print(e)
+            print(f"Caching {payload_path} -> {cache_path} failed")
+
+    def fetch_to(self, url, dst):
+        cache_path = self.cache_path_for_url(url)
+        if os.path.exists(cache_path):
+            print(f"Cache hit! {url}")
+            shutil.copy2(cache_path, dst)
+            return True
+        else:
+            print(f"Cache miss {url}")
+            return False
+
 def reporthook(count, block_size, total_size):
     global start_time
 
@@ -67,6 +112,11 @@ def reporthook(count, block_size, total_size):
     sys.stdout.flush()
 
 def download(url, filename):
+    cache = DownloadCache()
+    hit = cache.fetch_to(url, filename)
+    if hit:
+        return
+
     url_session = FancyURLopener()
 
     try:
@@ -79,6 +129,8 @@ def download(url, filename):
     sys.stdout.write('\x1b[2K\r')
     sys.stdout.write("... Downloaded " + filename + "\n")
     sys.stdout.flush()
+
+    cache.store(url, filename)
 
 def simple_download(url):
     req = urlopen(url)
@@ -271,6 +323,13 @@ class TruckClient:
                 "truck version",
                 "print version and exit",
                 self.perform_version_action
+            ),
+            TruckAction(
+                "nuke_cache",
+                0,
+                "truck nuke_cache",
+                "nukes download cache",
+                self.perform_nuke_cache_action
             )
         ]
 
@@ -363,6 +422,10 @@ class TruckClient:
 
     def perform_version_action(self):
         print(TRUCK_VERSION)
+
+    def perform_nuke_cache_action(self):
+        cache = DownloadCache()
+        cache.nuke()
 
 ####
 # TruckAuthor
