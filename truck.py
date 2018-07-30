@@ -19,7 +19,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.6.2"
+TRUCK_VERSION = "0.6.3"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -111,9 +111,9 @@ def reporthook(count, block_size, total_size):
                     (percent, progress_size / (1024 * 1024), speed, duration))
     sys.stdout.flush()
 
-def download(url, filename):
+def download(url, filename, check_cache=True):
     cache = DownloadCache()
-    hit = cache.fetch_to(url, filename)
+    hit = check_cache and cache.fetch_to(url, filename)
     if hit:
         return
 
@@ -248,14 +248,25 @@ class TruckDep:
         with open(self.version_filepath) as f:
             return json.loads(f.read())
 
-    def download_spec(self):
-        download(self.spec_url, self.spec_path)
+    def download_spec(self, check_cache=True):
+        download(self.spec_url, self.spec_path, check_cache)
 
         with open(self.spec_path) as f:
             try:
                 self.spec_json = json.loads(f.read())
             except:
                 self.spec_json = {}
+
+        # check if spec json is missing the spec version
+        # if it is, we need to check remote for a newer version
+        try:
+            _ = self.binary_url
+        except KeyError:
+            if check_cache:
+                print("Possible stale spec cache...")
+                self.download_spec(False)
+            else:
+                raise
 
     def download_binary(self):
         download(self.binary_url, self.binary_path)
