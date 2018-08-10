@@ -797,7 +797,10 @@ def main():
 
     if not selected_action:
         print("Please choose an action:")
-        TruckAction.print_actions(all_actions)
+        print("Client:")
+        TruckAction.print_actions(truck_client.actions)
+        print("Author:")
+        TruckAction.print_actions(truck_author.actions)
         exit(1)
 
     selected_action[0].trigger(args[1:])
