@@ -136,6 +136,10 @@ def simple_download(url):
     req = urlopen(url)
     return req.read()
 
+def precondition(cond=False, msg=""):
+    if not cond:
+        print(message)
+        exit(1)
 
 class PathUtils:
 
@@ -181,8 +185,7 @@ class TruckAction:
             range_ = self.arg_count
 
         if len(args) not in range_:
-            print("{} expects {} arguments".format(self.name, self.arg_count))
-            exit(1)
+            precondition(msg=f"{self.name} expects {self.arg_count} arguments")
 
         self.callback(*args)
 
@@ -346,8 +349,7 @@ class TruckClient:
 
     def assert_truck_config_available(self):
         if not self.truck_config:
-            print("Cannot find {} in local directory!".format(config_filename))
-            exit(1)
+            precondition(msg=f"Cannot find {config_filename} in local directory!")
 
     def load_client_config(self):
         config_filename = "truck.json"
@@ -461,8 +463,7 @@ class Hosting:
     def active_hosting(self):
         hosts = self.all()
         if not hosts:
-            print("Please populate truck-author.json with a supported host")
-            exit(1)
+            precondition("Please populate truck-author.json with a supported host")
         return hosts[0]
 
     def all(self):
@@ -722,8 +723,7 @@ class TruckAuthor:
         path = path[:-1] if path.endswith("/") else path
 
         if not os.path.exists(path):
-            print("{} doesn't exist!".format(path))
-            exit(1)
+            precondition(f"{path} doesn't exist!")
 
         filepath = target + "-config.json"
         config = PathUtils.open_or_create_json_file(filepath, {"files":[]})
