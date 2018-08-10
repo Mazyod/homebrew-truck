@@ -318,6 +318,13 @@ class TruckClient:
         self.deps_on_disk = self.load_deps_on_disk()
         self.actions = [
             TruckAction(
+                "list",
+                0,
+                "truck list",
+                "list the downloaded deps",
+                self.perform_list_action
+            ),
+            TruckAction(
                 "sync",
                 0,
                 "truck sync",
@@ -433,6 +440,10 @@ class TruckClient:
             print(dep.name + " synced!")
 
         self.clean_temp_folder()
+
+    def perform_list_action(self):
+        self.assert_truck_config_available()
+        print("\n".join([str(dep) for dep in sorted(self.deps_on_disk, key=lambda x: x.name)]))
 
     def perform_sync_action(self):
         self.assert_truck_config_available()
