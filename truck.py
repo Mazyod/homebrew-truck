@@ -235,7 +235,7 @@ class TruckDep:
         return TRUCK_ROOT_DIRECTORY
 
     @property
-    def is_outdated(self):
+    def is_out_of_sync(self):
         if not os.path.isfile(self.version_filepath):
             return True
 
@@ -421,7 +421,7 @@ class TruckClient:
 
     def perform_sync_action(self):
         self.assert_truck_config_available()
-        deps = [dep for dep in self.truck_config.deps if dep.is_outdated]
+        deps = [dep for dep in self.truck_config.deps if dep.is_out_of_sync]
         self.fetch_deps(deps)
 
     def perform_pull_action(self):
@@ -430,7 +430,7 @@ class TruckClient:
 
     def perform_check_action(self):
         self.assert_truck_config_available()
-        deps = [dep for dep in self.truck_config.deps if dep.is_outdated]
+        deps = [dep for dep in self.truck_config.deps if dep.is_out_of_sync]
         print("error" if deps else "ok")
 
     def perform_version_action(self):
