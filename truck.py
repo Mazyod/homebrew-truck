@@ -389,6 +389,8 @@ class TruckClient:
             except:
                 print("warning: failed to remove " + filepath)
 
+        os.remove(dep.version_filepath)
+
     def download_binary_and_spec(self, dep):
         dep.download_spec()
         dep.download_binary()
