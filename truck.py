@@ -198,6 +198,12 @@ class TruckDep:
         self.binary_filelist = []
         self.old_spec = self.load_old_spec()
 
+    def __repr__(self):
+        return str(self)
+
+    def __str__(self):
+        return f"{self.name} ({self.version})"
+
     @property
     def binary_url(self):
         return self.spec_json[self.version]
@@ -406,7 +412,7 @@ class TruckClient:
             return
 
         print("Updating:")
-        print("\n".join([dep.name for dep in deps]))
+        print("\n".join([str(dep) for dep in deps]))
 
         self.clean_temp_folder()
 
