@@ -191,12 +191,16 @@ class TruckAction:
 
 
 class TruckDep:
-    def __init__(self, version, url):
-        self.version = version
+    def __init__(self, version=None, url=None, name=None):
+        precondition(bool(version and url) != bool(name), "URL xor name required")
         self.spec_url = url
+        self.name = name or os.path.splitext(self.spec_filename)[0]
+
+        self.old_spec = self.load_old_spec()
+        self.version = version or self.old_spec["version"]
+
         self.spec_json = {}
         self.binary_filelist = []
-        self.old_spec = self.load_old_spec()
 
     def __repr__(self):
         return str(self)
@@ -215,10 +219,6 @@ class TruckDep:
     @property
     def binary_filename(self):
         return os.path.basename(self.binary_url)
-
-    @property
-    def name(self):
-        return os.path.splitext(self.spec_filename)[0]
 
     @property
     def version_filepath(self):
@@ -315,6 +315,7 @@ class TruckClient:
 
     def __init__(self):
         self.truck_config = self.load_client_config()
+        self.deps_on_disk = self.load_deps_on_disk()
         self.actions = [
             TruckAction(
                 "sync",
@@ -366,6 +367,12 @@ class TruckClient:
             client_json = json.loads(f.read())
 
         return ClientConfig(client_json)
+
+    def load_deps_on_disk(self):
+        all_files = os.listdir(TRUCK_ROOT_DIRECTORY)
+        ver_files = [fname for fname in all_files if fname.endswith(".version")]
+        target_names = [os.path.splitext(f)[0] for f in ver_files]
+        return [TruckDep(name=n) for n in target_names]
 
     def clean_temp_folder(self):
         try:
