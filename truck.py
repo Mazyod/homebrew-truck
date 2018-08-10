@@ -328,7 +328,7 @@ class TruckClient:
                 "check",
                 0,
                 "truck check",
-                "ckeck if sync is required printing either ok or error",
+                "check if sync is required printing either ok or error",
                 self.perform_check_action
             ),
             TruckAction(
