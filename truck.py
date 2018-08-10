@@ -346,6 +346,13 @@ class TruckClient:
                 self.perform_check_action
             ),
             TruckAction(
+                "clean",
+                1,
+                "truck clean nonexistent",
+                "deletes target's files or send in existent/nonexistent",
+                self.perform_clean_action
+            ),
+            TruckAction(
                 "version",
                 0,
                 "truck version",
@@ -380,6 +387,13 @@ class TruckClient:
         ver_files = [fname for fname in all_files if fname.endswith(".version")]
         target_names = [os.path.splitext(f)[0] for f in ver_files]
         return [TruckDep(name=n) for n in target_names]
+
+    def clean_deps(self, deps):
+        print("Cleaning:")
+        print("\n".join([str(dep) for dep in deps]))
+
+        for dep in deps:
+            self.clean_extraction_path(dep)
 
     def clean_temp_folder(self):
         try:
@@ -458,6 +472,17 @@ class TruckClient:
         self.assert_truck_config_available()
         deps = [dep for dep in self.truck_config.deps if dep.is_out_of_sync]
         print("error" if deps else "ok")
+
+    def perform_clean_action(self, target):
+        self.assert_truck_config_available()
+
+        deps = self.deps_on_disk
+        if target == "nonexistent":
+            existent_names = [d.name for d in self.truck_config.deps]
+            deps = [d for d in deps if d.name not in existent_names]
+        elif target != "all":
+            deps = [d for d in deps if d.name.lower() == target.lower()]
+        self.clean_deps(deps)
 
     def perform_version_action(self):
         print(TRUCK_VERSION)
