@@ -138,7 +138,7 @@ def simple_download(url):
 
 def precondition(cond=False, msg=""):
     if not cond:
-        print(message)
+        print(msg)
         exit(1)
 
 class PathUtils:
@@ -370,7 +370,7 @@ class TruckClient:
 
     def assert_truck_config_available(self):
         if not self.truck_config:
-            precondition(msg=f"Cannot find {config_filename} in local directory!")
+            precondition(msg=f"Cannot find truck.json in local directory!")
 
     def load_client_config(self):
         config_filename = "truck.json"
