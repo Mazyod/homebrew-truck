@@ -286,7 +286,8 @@ class TruckDep:
 
 class ClientConfig:
     def __init__(self, json):
-        self.deps = map(lambda dep: TruckDep(**dep), json)
+        # X( .. change to list so we can reuse it!!
+        self.deps = list(map(lambda dep: TruckDep(**dep), json))
 
 
 class Truck:
