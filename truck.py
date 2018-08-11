@@ -19,7 +19,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.1"
+TRUCK_VERSION = "0.7.3"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -286,7 +286,6 @@ class TruckDep:
 
 class ClientConfig:
     def __init__(self, json):
-        # X( .. change to list so we can reuse it!!
         self.deps = [TruckDep(**dep) for dep in json]
 
 
