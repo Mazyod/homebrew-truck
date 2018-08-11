@@ -19,7 +19,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.0"
+TRUCK_VERSION = "0.7.1"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -383,6 +383,8 @@ class TruckClient:
         return ClientConfig(client_json)
 
     def load_deps_on_disk(self):
+        if not os.path.isdir(TRUCK_ROOT_DIRECTORY):
+            return []
         all_files = os.listdir(TRUCK_ROOT_DIRECTORY)
         ver_files = [fname for fname in all_files if fname.endswith(".version")]
         target_names = [os.path.splitext(f)[0] for f in ver_files]
