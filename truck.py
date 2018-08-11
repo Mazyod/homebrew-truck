@@ -287,7 +287,7 @@ class TruckDep:
 class ClientConfig:
     def __init__(self, json):
         # X( .. change to list so we can reuse it!!
-        self.deps = list(map(lambda dep: TruckDep(**dep), json))
+        self.deps = [TruckDep(**dep) for dep in json]
 
 
 class Truck:
@@ -391,12 +391,12 @@ class TruckClient:
         target_names = [os.path.splitext(f)[0] for f in ver_files]
         return [TruckDep(name=n) for n in target_names]
 
-    def clean_deps(self, deps):
+    def clean_deps(self, deps, protected_files):
         print("Cleaning:")
         print("\n".join([str(dep) for dep in deps]))
 
         for dep in deps:
-            self.clean_extraction_path(dep)
+            self.clean_extraction_path(dep, protected_files)
 
     def clean_temp_folder(self):
         try:
@@ -406,11 +406,13 @@ class TruckClient:
 
         os.makedirs(TRUCK_TMP_DIRECTORY)
 
-    def clean_extraction_path(self, dep):
+    def clean_extraction_path(self, dep, protected_files=set()):
         if not dep.old_spec:
             return
 
         for f in dep.old_spec["files"]:
+            if f in protected_files:
+                continue
             filepath = os.path.join(TRUCK_ROOT_DIRECTORY, f)
             try:
                 if os.path.isfile(filepath):
@@ -480,12 +482,14 @@ class TruckClient:
         self.assert_truck_config_available()
 
         deps = self.deps_on_disk
+        protected_files = set()
         if target == "nonexistent":
             existent_names = [d.name for d in self.truck_config.deps]
             deps = [d for d in deps if d.name not in existent_names]
+            protected_files = set([f for d in self.truck_config.deps for f in d.old_spec["files"]])
         elif target != "all":
             deps = [d for d in deps if d.name.lower() == target.lower()]
-        self.clean_deps(deps)
+        self.clean_deps(deps, protected_files)
 
     def perform_version_action(self):
         print(TRUCK_VERSION)
