@@ -19,7 +19,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.3"
+TRUCK_VERSION = "0.7.4"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -485,7 +485,8 @@ class TruckClient:
         if target == "nonexistent":
             existent_names = [d.name for d in self.truck_config.deps]
             deps = [d for d in deps if d.name not in existent_names]
-            protected_files = set([f for d in self.truck_config.deps for f in d.old_spec["files"]])
+            old_specs = [d.old_spec for d in self.truck_config.deps if d.old_spec]
+            protected_files = set([f for s in old_specs for f in s["files"]])
         elif target != "all":
             deps = [d for d in deps if d.name.lower() == target.lower()]
         self.clean_deps(deps, protected_files)
