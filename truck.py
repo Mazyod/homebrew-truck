@@ -5,6 +5,7 @@ this file contains both the client and authoring tools.
 """
 import sys
 import os
+import re
 import json
 import time
 import zipfile
@@ -19,12 +20,13 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.4"
+TRUCK_VERSION = "0.7.5"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
 
 TRUCK_SECRETS_TEMPLATE = {
+    "SWIFT_VERSION_OVERRIDE": "",
     "GITHUB_TOKEN": "",
     "AWS_ACCESS_KEY_ID": "",
     "AWS_SECRET_ACCESS_KEY": ""
@@ -192,7 +194,13 @@ class TruckAction:
 
 class TruckDep:
     def __init__(self, version=None, url=None, name=None):
+        # version and url provided from truck.json, while name is provided for
+        # deps that are downloaded and enumerated from disk
         precondition(bool(version and url) != bool(name), "URL xor name required")
+        # in case the version is provided from truck.json, let's allow for the
+        # user to override the Swift version outside of git
+        version = version and Truck.process_version(version)
+
         self.spec_url = url
         self.name = name or os.path.splitext(self.spec_filename)[0]
 
@@ -303,6 +311,14 @@ class Truck:
         )
 
         return cls.SECRETS
+
+    @classmethod
+    def process_version(cls, version):
+        swift_override = cls.secrets().get("SWIFT_VERSION_OVERRIDE")
+        if not swift_override:
+            return version
+        regex = re.compile(r"\d+(\.\d+)+-\d+(\.\d+)+-\d+(\.\d+)+$")
+        return regex.sub(swift_override, version)
 
 ####
 # Truck client implementation
