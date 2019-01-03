@@ -12,6 +12,7 @@ import zipfile
 import shutil
 import urllib
 import hashlib
+from collections import OrderedDict
 from urllib.request import FancyURLopener, urlopen
 from distutils.version import LooseVersion
 
@@ -20,7 +21,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.5"
+TRUCK_VERSION = "0.7.6"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
@@ -199,13 +200,15 @@ class TruckDep:
         precondition(bool(version and url) != bool(name), "URL xor name required")
         # in case the version is provided from truck.json, let's allow for the
         # user to override the Swift version outside of git
-        version = version and Truck.process_version(version)
+        processed_version = version and Truck.process_version(version)
 
         self.spec_url = url
         self.name = name or os.path.splitext(self.spec_filename)[0]
 
         self.old_spec = self.load_old_spec()
-        self.version = version or self.old_spec["version"]
+        self.version = processed_version or self.old_spec["version"]
+        # keep raw version handy in case we need to write to truck.json
+        self.raw_version = version
 
         self.spec_json = {}
         self.binary_filelist = []
@@ -249,6 +252,11 @@ class TruckDep:
         return TRUCK_ROOT_DIRECTORY
 
     @property
+    def json(self):
+        # let's guarantee the key order
+        return OrderedDict({"url": self.spec_url, "version": self.raw_version})
+
+    @property
     def is_out_of_sync(self):
         if not os.path.isfile(self.version_filepath):
             return True
@@ -257,6 +265,10 @@ class TruckDep:
             meta = json.loads(f.read())
 
         return meta["version"] != self.version
+
+    def update_version(self, new_version):
+        # make sure to change raw_version only, this is for disk needs only
+        self.raw_version = new_version
 
     def load_old_spec(self):
         if not os.path.isfile(self.version_filepath):
@@ -293,8 +305,23 @@ class TruckDep:
 
 
 class ClientConfig:
-    def __init__(self, json):
+    def __init__(self, json, filepath):
         self.deps = [TruckDep(**dep) for dep in json]
+        self.filepath = filepath
+
+    def set_target_version(self, target, version):
+        for dep in self.deps:
+            if dep.name == target:
+                dep.update_version(version)
+                self.write_to_file()
+                break
+        else:
+            print(f"Warning: Couldn't find {target} in truck.json")
+
+    def write_to_file(self):
+        with open(self.filepath, "w+") as f:
+            raw = [d.json for d in self.deps]
+            f.write(json.dumps(raw, indent=2) + "\n")
 
 
 class Truck:
@@ -381,7 +408,14 @@ class TruckClient:
                 "truck nuke_cache",
                 "nukes download cache",
                 self.perform_nuke_cache_action
-            )
+            ),
+            TruckAction(
+                "set_version",
+                2,
+                "truck set_version zendesk 3.0.1",
+                "set the version of a given target in truck.json",
+                self.perform_set_version_action
+            ),
         ]
 
     def assert_truck_config_available(self):
@@ -396,7 +430,7 @@ class TruckClient:
         with open(config_filename) as f:
             client_json = json.loads(f.read())
 
-        return ClientConfig(client_json)
+        return ClientConfig(client_json, config_filename)
 
     def load_deps_on_disk(self):
         if not os.path.isdir(TRUCK_ROOT_DIRECTORY):
@@ -513,6 +547,10 @@ class TruckClient:
     def perform_nuke_cache_action(self):
         cache = DownloadCache()
         cache.nuke()
+
+    def perform_set_version_action(self, target, new_version):
+        self.truck_config.set_target_version(target, new_version)
+
 
 ####
 # TruckAuthor
