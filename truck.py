@@ -631,12 +631,14 @@ class GithubHost:
             print("Please fill them in ~/.truckrc")
             exit(1)
 
-        spec_name = '{t}.json'.format(t=target)
-        binary_name = '{t}-{v}.zip'.format(t=target, v=version)
-
         print("Uploading to Github ...")
+
+        spec_name = f'{target}.json'
         self.upload_file(spec_name, spec_filepath)
-        self.upload_file(binary_name, archive_filepath)
+
+        if archive_filepath:
+            binary_name = f'{target}-{version}.zip'
+            self.upload_file(binary_name, archive_filepath)
 
 
 class TruckAuthor:
@@ -678,6 +680,13 @@ class TruckAuthor:
                 "truck reset zendesk-sdk",
                 "deletes the spec json config",
                 self.perform_reset_action
+            ),
+            TruckAction(
+                "rmversion",
+                2,
+                "truck rmversion zendesk-sdk 1.1.0",
+                "removes the specified version from remote",
+                self.perform_rmversion_action
             )
         ]
 
@@ -773,14 +782,40 @@ class TruckAuthor:
 
         PathUtils.write_json_file(filepath, config)
 
+    def perform_rmversion_action(self, target, version):
+        self.assert_truck_config_available()
+
+        spec_json = self.hosting.find_spec(target)
+        if not spec_json:
+            print(f"Failed to find a json spec for target {target}")
+            exit(1)
+
+        try:
+            file_url = spec_json.pop(version)
+        except KeyError:
+            print(f"Failed to find version {version}!")
+            exit(1)
+
+        # TODO: duplicate code, consolidate me please
+        files_dir = self.prepare_staging_area(TRUCK_TMP_DIRECTORY, [])
+        # write spec to temp file so we can upload it
+        spec_filename = TRUCK_SPEC_FILENAME.format(target=target)
+        spec_filepath = os.path.join(TRUCK_TMP_DIRECTORY, spec_filename)
+        PathUtils.write_json_file(spec_filepath, spec_json)
+
+        host = self.hosting.active_hosting
+        host.publish(target, version, spec_filepath, None)
+        print(f"{target} -> {version} should be removed!")
+
+
     def perform_release_action(self, target, version=None):
         self.assert_truck_config_available()
 
         # load the target config file
         target_config_filepath = TARGET_CONFIG_FILEPATH.format(target=target)
         if not os.path.isfile(target_config_filepath):
-            print("Can't find: {}".format(target_config_filepath))
-            print("Please run: truck add {} path/to/stuff".format(target))
+            print(f"Can't find: {target_config_filepath}")
+            print(f"Please run: truck add {target} path/to/stuff")
             exit(1)
 
         with open(target_config_filepath) as f:
