@@ -21,7 +21,7 @@ from distutils.version import LooseVersion
 # Global configuration / constants
 #
 
-TRUCK_VERSION = "0.7.7"
+TRUCK_VERSION = "0.8.0"
 
 TRUCK_ROOT_DIRECTORY = "Truck"
 TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
