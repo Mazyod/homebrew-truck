@@ -19,7 +19,7 @@ brew upgrade truck
 
 ## Problem
 
-As iOS developers using Carthage for dependcy management, we quickly hit a roadblock trying to distribute pre-built binaries with our repo. Even when trying to use Carthage binary specification, Carthage complained when the pre-built binary was a static framework.
+As iOS developers using Carthage for dependency management, we quickly hit a roadblock trying to distribute pre-built binaries with our repo. Even when trying to use Carthage binary specification, Carthage complained when the pre-built binary was a static framework.
 
 Regardless, we wanted something simple, straight-forward, and mostly automated for our team to use.
 
@@ -29,19 +29,16 @@ The way Truck aims to solve this problem is by having a versions specification f
 
 ### Configure Truck for Publishing
 
-Currently, Truck supports either Github releases or AWS S3 as a hosting service. To configure truck for publishing, two things are required:
+Currently, Truck supports Github releases as a hosting service. To configure truck for publishing, two things are required:
 
-1. `~/.truckrc` file that contains Github access token (with repo access) or AWS access key/secret pair.
+1. `~/.truckrc` file that contains Github access token (with repo access).
 2. `truck-author.json` in a local directory where you want to manage your Truck "targets".
 3. Only if using Github, create a `truck` tag on your hosting repo, which we will upload the files under.
 
 ```js
 // .truckrc blueprint
 {
-  "GITHUB_TOKEN": "(access token with repo access)",
-  "AWS_ACCESS_KEY_ID": "(aws access key)",
-  "AWS_SECRET_ACCESS_KEY": "(aws access secret)",
-  "AWS_DEFAULT_REGION": "eu-west-1"
+  "GITHUB_TOKEN": "(access token with repo access)"
 }
 ```
 
@@ -49,7 +46,7 @@ You can simply do `truck add Blah whatever`, and truck should create a stub `.tr
 
 ```sh
 $ truck init # creates truck-author.json
-# in truck-author.json, specify the basepath on S3 for truck to upload to (e.g. bucket-name/truck)
+# in truck-author.json, specify the github user and repo that will host the files.
 ```
 
 ### Publishing a Truck Dependency
@@ -72,7 +69,7 @@ For clients consuming your dependencies, it is as simple as creating a `truck.js
 ```json
 [
   {
-    "url": "https://s3-region.amazonaws.com/bucket-name/truck/MyTarget.json",
+    "url": "https://github.com/user/repo/releases/download/truck/target.json",
     "version": "3.2.5"
   }
 ]
@@ -80,4 +77,3 @@ For clients consuming your dependencies, it is as simple as creating a `truck.js
 
 ... Then, running `truck sync`!
 This will download dependencies into `Truck/Tmp`, then extract the archives into `Truck/TARGET_NAME`.
-

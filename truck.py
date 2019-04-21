@@ -28,9 +28,7 @@ TRUCK_TMP_DIRECTORY = os.path.join(TRUCK_ROOT_DIRECTORY, "Tmp")
 
 TRUCK_SECRETS_TEMPLATE = {
     "SWIFT_VERSION_OVERRIDE": "",
-    "GITHUB_TOKEN": "",
-    "AWS_ACCESS_KEY_ID": "",
-    "AWS_SECRET_ACCESS_KEY": ""
+    "GITHUB_TOKEN": ""
 }
 
 TRUCK_AUTHOR_TEMPLATE = {
@@ -38,11 +36,6 @@ TRUCK_AUTHOR_TEMPLATE = {
         "user": "",
         "repo": ""
     }
-    # aws config structure:
-    # "aws": {
-    #     "s3_base_path": "",
-    #     "default_region": "eu-west-1"
-    # }
 }
 
 TRUCK_SPEC_FILENAME = "{target}-spec.json"
@@ -565,11 +558,8 @@ class Hosting:
         self.config = config or {}
         self.hosts = []
 
-        # prefer github config over s3 ;)
         if "github" in self.config:
             self.hosts.append(GithubHost(config))
-        if "aws" in self.config:
-            self.hosts.append(S3Host(config))
 
     @property
     def active_hosting(self):
@@ -647,70 +637,6 @@ class GithubHost:
         print("Uploading to Github ...")
         self.upload_file(spec_name, spec_filepath)
         self.upload_file(binary_name, archive_filepath)
-
-class S3Host:
-    def __init__(self, author_config):
-
-        config = author_config["aws"]
-        self.region = config["default_region"]
-
-        base_path = config["s3_base_path"]
-        start = 1 if base_path.startswith("/") else 0
-        self.base_path = base_path[start:]
-
-        self.host = "https://s3-{}.amazonaws.com/".format(self.region)
-
-    # path definitions
-
-    ## uri builders
-    def build_path(self, subpath):
-        return os.path.join(self.base_path, subpath)
-
-    def build_http_uri(self, path):
-        return os.path.join(self.host, path)
-
-    def build_s3_uri(self, path):
-        return os.path.join("s3://", path)
-
-    ## spec uris
-    def spec_path(self, target):
-        return self.build_path("{t}.json".format(t=target))
-
-    def spec_http_uri(self, target):
-        return self.build_http_uri(self.spec_path(target))
-
-    def spec_s3_uri(self, target):
-        return self.build_s3_uri(self.spec_path(target))
-
-    ## binary uris
-    def binary_path(self, target, version):
-        return self.build_path("{t}/{v}/{t}.zip".format(t=target, v=version))
-
-    def binary_http_uri(self, target, version):
-        return self.build_http_uri(self.binary_path(target, version))
-
-    def binary_s3_uri(self, target, version):
-        return self.build_s3_uri(self.binary_path(target, version))
-
-    # actions
-
-    def upload_file(self, local_path, remote_path):
-        upload_command = " ".join(map(lambda i: "=".join(i), Truck.secrets().items()))
-        upload_command += ' aws s3 cp "{}" "{}" --acl public-read'
-        os.system(upload_command.format(local_path, remote_path))
-
-    def publish(self, target, version, spec_filepath, archive_filepath):
-
-        # TODO - possibly fallback to env to find the keys
-        if "AWS_ACCESS_KEY_ID" not in Truck.secrets() \
-            or "AWS_SECRET_ACCESS_KEY" not in Truck.secrets():
-            print("Could not find AWS access keys in config nor env")
-            print("Please fill them in ~/.truckrc")
-            exit(1)
-
-        print("Uploading to S3 ...")
-        self.upload_file(spec_filepath, self.spec_s3_uri(target))
-        self.upload_file(archive_filepath, self.binary_s3_uri(target, version))
 
 
 class TruckAuthor:
